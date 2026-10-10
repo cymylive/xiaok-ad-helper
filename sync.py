@@ -18,6 +18,7 @@ import json
 import os
 import ssl
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -41,23 +42,31 @@ def token():
     return t
 
 
-def api(method, path, body=None):
+def api(method, path, body=None, retries=4):
+    """带重试的 API 调用（本机网络偶发 RemoteDisconnected）。"""
     url = "https://api.github.com" + path
     data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(url, data=data, method=method)
-    req.add_header("Authorization", "Bearer " + token())
-    req.add_header("User-Agent", "cymylive")
-    req.add_header("Accept", "application/vnd.github+json")
-    if data is not None:
-        req.add_header("Content-Type", "application/json")
-    try:
-        r = urllib.request.urlopen(req, timeout=60, context=ctx)
-        return r.status, json.loads(r.read().decode())
-    except urllib.error.HTTPError as e:
+    last = None
+    for i in range(retries):
+        req = urllib.request.Request(url, data=data, method=method)
+        req.add_header("Authorization", "Bearer " + token())
+        req.add_header("User-Agent", "cymylive")
+        req.add_header("Accept", "application/vnd.github+json")
+        if data is not None:
+            req.add_header("Content-Type", "application/json")
         try:
-            return e.code, json.loads(e.read().decode())
-        except Exception:
-            return e.code, None
+            r = urllib.request.urlopen(req, timeout=60, context=ctx)
+            return r.status, json.loads(r.read().decode())
+        except urllib.error.HTTPError as e:
+            try:
+                return e.code, json.loads(e.read().decode())
+            except Exception:
+                return e.code, None
+        except Exception as e:
+            last = e
+            print("    [重试 %d/%d] %s" % (i + 1, retries, type(e).__name__))
+            time.sleep(2)
+    raise SystemExit("API 请求失败：%s" % last)
 
 
 def remote_tree():
