@@ -1,0 +1,4 @@
+{
+  "server": "http://<手机IP>:8080",
+  "threshold_ms": 350
+}

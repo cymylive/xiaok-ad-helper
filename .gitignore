@@ -1,0 +1,22 @@
+# 本地配置（含真实手机 IP）
+client/config.json
+*.local.json
+
+# 日志
+*.log
+bridge.log
+
+# 构建产物
+build/
+dist/
+*.spec
+__pycache__/
+*.pyc
+
+# 便携版（exe 太大，走 Release 发布）
+便携版/
+
+# 系统
+Thumbs.db
+desktop.ini
+.DS_Store

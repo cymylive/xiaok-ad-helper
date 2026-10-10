@@ -1,0 +1,5 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# Termux 服务脚本：放到 $PREFIX/var/service/scroll/run 并 chmod +x
+termux-wake-lock 2>/dev/null
+cd /data/data/com.termux/files/home
+exec python3 scroll_web.py
