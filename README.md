@@ -183,6 +183,20 @@ python client/make_icon.py
 pyinstaller --onefile --windowed --name 小K广告助手 --icon client/icon.ico --add-data "client/icon.ico;." client/mouse_bridge.py
 ```
 
+## 维护者：同步到 GitHub
+
+本机 Windows 的 git 推送会遇到 schannel TLS 故障（`SEC_E_INVALID_TOKEN` / `curl 35 server closed abruptly`），
+而 GitHub REST API 走 Python urllib 正常。因此提供一个基于 API 的同步工具：
+
+```bash
+set GITHUB_TOKEN=ghp_xxx
+E:\python\python-V\python3.14\python.exe -X utf8 sync.py status        # 查看差异
+E:\python\python-V\python3.14\python.exe -X utf8 sync.py push "说明"    # 上传改动
+E:\python\python-V\python3.14\python.exe -X utf8 sync.py pull          # 下载改动
+```
+
+纯标准库实现，无需第三方依赖。`client/config.json`（含真实手机 IP）自动跳过。
+
 ## License
 
 MIT
