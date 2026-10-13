@@ -34,6 +34,17 @@ jobs:
         with:
           gradle-version: '8.5'
 
+      - name: Generate debug keystore (release 签名用)
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkey -v -keystore ~/.android/debug.keystore \
+              -storepass android -alias androiddebugkey -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          ls -l ~/.android/
+
       - name: Generate Gradle wrapper (if missing)
         working-directory: android
         run: gradle wrapper --gradle-version 8.5
@@ -42,9 +53,9 @@ jobs:
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon --stacktrace
 
-      - name: Build release APK (unsigned, 便于直接安装测试)
+      - name: Build release APK (signed with debug key)
         working-directory: android
-        run: ./gradlew assembleRelease --no-daemon --stacktrace || true
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Collect APKs
         run: |
@@ -59,7 +70,18 @@ jobs:
           path: out/*.apk
           if-no-files-found: error
 
-      - name: Publish to Release (仅 tag 触发)
+      - name: Publish to 'latest' rolling release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "最新构建 (latest)"
+          body: |
+            自动构建于 SHA ${GITHUB_SHA}
+          files: out/*.apk
+          make_latest: true
+
+      - name: Publish to versioned Release (tag 触发)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
