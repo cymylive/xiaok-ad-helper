@@ -5,6 +5,8 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.WindowManager
+import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
@@ -19,11 +21,35 @@ import java.util.Locale
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
+    private var keepOn = true
 
-    @SuppressLint("SetJavaScriptEnabled")
+    /** 暴露给网页 JS 的桥接：控制屏幕常亮 */
+    inner class Bridge {
+        @JavascriptInterface
+        fun setKeepScreenOn(on: Boolean) {
+            keepOn = on
+            runOnUiThread { applyKeepScreenOn(on) }
+        }
+
+        @JavascriptInterface
+        fun getKeepScreenOn(): Boolean = keepOn
+    }
+
+    private fun applyKeepScreenOn(on: Boolean) {
+        if (on) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
+    @SuppressLint("SetJavaScriptEnabled", "AddJavascriptInterface")
     override fun onCreate(savedInstanceState: Bundle?) {
         installCrashHandler()
         super.onCreate(savedInstanceState)
+
+        // 默认屏幕常亮：防止 1 分钟自动息屏（用户按电源键仍可主动息屏）
+        applyKeepScreenOn(true)
 
         webView = WebView(this)
         webView.settings.javaScriptEnabled = true
@@ -31,6 +57,7 @@ class MainActivity : AppCompatActivity() {
         webView.settings.loadWithOverviewMode = true
         webView.settings.useWideViewPort = true
         webView.webViewClient = WebViewClient()
+        webView.addJavascriptInterface(Bridge(), "AndroidBridge")
         setContentView(webView)
 
         try {
