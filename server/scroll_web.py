@@ -7,6 +7,7 @@
 """
 import json
 import os
+import socket
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
@@ -15,6 +16,29 @@ PORT = 8080
 MAX_EVENTS = 200
 DEFAULT_SPEED = 1200          # px/秒，按住时的滚动速度
 PRESET_FILE = os.path.join(os.path.expanduser("~"), "scroll_presets.json")
+
+
+def _lan_ip():
+    """获取本机局域网 IP（用于提示电脑端该访问哪个地址）。"""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+        finally:
+            s.close()
+        if ip and not ip.startswith("127."):
+            return ip
+    except Exception:
+        pass
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None):
+            ip = info[4][0]
+            if ip and not ip.startswith("127.") and ":" not in ip:
+                return ip
+    except Exception:
+        pass
+    return "127.0.0.1"
 
 _lock = threading.Lock()
 _st = {"text": "", "tver": 0, "speed": DEFAULT_SPEED, "seq": 0,
@@ -88,12 +112,16 @@ html,body{margin:0;padding:0;background:#111;color:#e8e8e8;
 #bar{position:fixed;left:0;right:0;top:0;height:32px;line-height:32px;
  padding:0 12px;font-size:12px;background:rgba(0,0,0,.7);color:#7ab;
  z-index:9;overflow:hidden;white-space:nowrap;}
-#content{padding:44px 16px 60vh;font-size:19px;line-height:1.9;
+#addr{position:fixed;left:0;right:0;top:32px;height:30px;line-height:30px;
+ padding:0 12px;font-size:13px;background:rgba(20,60,110,.95);color:#8cf;
+ z-index:9;overflow:hidden;white-space:nowrap;text-align:center;font-weight:600;}
+#content{padding:78px 16px 60vh;font-size:19px;line-height:1.9;
  white-space:pre-wrap;word-break:break-word;}
 #empty{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
  color:#555;font-size:15px;}
 </style></head><body>
 <div id="bar">连接中...</div>
+<div id="addr">电脑端访问 <b>__LAN_URL__</b></div>
 <div id="empty">暂无文本，请在电脑端粘贴并发送</div>
 <div id="content"></div>
 <script>
@@ -406,13 +434,17 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/", "/index.html"):
             self._html(HOME)
         elif path == "/m":
-            self._html(PHONE)
+            self._html(PHONE.replace("__LAN_URL__", "http://%s:%d/c" % (_lan_ip(), PORT)))
         elif path == "/c":
             self._html(DESK)
         elif path == "/state":
             since = int((q.get("since") or ["0"])[0])
             tver = int((q.get("tver") or ["-1"])[0])
             self._json(snapshot(since, tver))
+        elif path == "/info":
+            ip = _lan_ip()
+            self._json({"ip": ip, "port": PORT,
+                        "url": "http://%s:%d/c" % (ip, PORT)})
         elif path == "/config":
             with _lock:
                 self._json({"speed": _st["speed"]})
