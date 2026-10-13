@@ -18,6 +18,11 @@ DEFAULT_SPEED = 1200          # px/秒，按住时的滚动速度
 PRESET_FILE = os.path.join(os.path.expanduser("~"), "scroll_presets.json")
 
 
+def _config_file():
+    # 与 PRESET_FILE 同目录（APK 下 main.py 会把 PRESET_FILE 重定向到 filesDir）
+    return os.path.join(os.path.dirname(PRESET_FILE), "scroll_config.json")
+
+
 def _lan_ip():
     """获取本机局域网 IP（用于提示电脑端该访问哪个地址）。"""
     try:
@@ -61,6 +66,39 @@ def save_presets():
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(_st["presets"], f, ensure_ascii=False)
         os.replace(tmp, PRESET_FILE)
+    except Exception:
+        pass
+
+
+def load_config():
+    """加载持久化配置：滚动速度 / 设备白名单 / 全局控制开关。"""
+    try:
+        with open(_config_file(), encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return
+        if "speed" in data:
+            try:
+                _st["speed"] = max(100, min(10000, int(data["speed"])))
+            except Exception:
+                pass
+        if "allow" in data:
+            _st["allow"] = str(data["allow"] or "")
+        if "bridge" in data:
+            _st["bridge"] = bool(data["bridge"])
+    except Exception:
+        pass
+
+
+def save_config():
+    """把 speed / allow / bridge 落盘，重启后恢复。"""
+    try:
+        with _lock:
+            data = {"speed": _st["speed"], "allow": _st["allow"], "bridge": _st["bridge"]}
+        tmp = _config_file() + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+        os.replace(tmp, _config_file())
     except Exception:
         pass
 
@@ -490,16 +528,19 @@ class Handler(BaseHTTPRequestHandler):
                 speed = 1200
             with _lock:
                 _st["speed"] = speed
+            save_config()
             self._json({"ok": True, "speed": speed})
         elif path == "/bridge":
             with _lock:
                 _st["bridge"] = bool(data.get("on"))
                 val = _st["bridge"]
+            save_config()
             self._json({"ok": True, "on": val})
         elif path == "/allow":
             with _lock:
                 _st["allow"] = str(data.get("allow", "")).strip()
                 val = _st["allow"]
+            save_config()
             self._json({"ok": True, "allow": val, "you": self.client_address[0]})
         elif path == "/presets":
             name = str(data.get("name", "")).strip()
@@ -540,6 +581,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     load_presets()
+    load_config()
     srv = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     print("serving on 0.0.0.0:%d" % PORT)
     try:
