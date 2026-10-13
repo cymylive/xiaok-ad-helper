@@ -54,12 +54,17 @@
 │   ├── config.example.json  # 配置模板
 │   ├── make_icon.py         # 生成托盘图标
 │   └── icon.ico
+├── android/                 # 手机端 APK（Kotlin + Chaquopy 嵌入 Python）
+│   ├── app/src/main/python/ # 复用 scroll_web.py（零改动）
+│   ├── app/src/main/java/   # MainActivity + ServerService
+│   └── README.md
 ├── server/                  # 手机端（Termux）
 │   ├── scroll_web.py        # 核心：HTTP 服务 + 前端页面
 │   ├── termux-service/run   # termux-services 服务脚本
 │   ├── bashrc-snippet.sh    # 打开 Termux 自动启动
 │   ├── start.sh             # 备选：tmux 启动
 │   └── tools/               # SSH 部署工具（可选）
+├── .github/workflows/       # GitHub Actions 自动编译 APK
 └── docs/
 ```
 
