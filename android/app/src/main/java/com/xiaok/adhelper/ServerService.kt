@@ -8,9 +8,12 @@ import android.app.Service
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import java.io.File
+import java.io.PrintWriter
+import java.io.StringWriter
 
 class ServerService : Service() {
 
@@ -20,13 +23,22 @@ class ServerService : Service() {
         super.onCreate()
         startForegroundNotice()
         Thread {
-            if (!Python.isStarted()) {
-                Python.start(AndroidPlatform(this))
+            try {
+                if (!Python.isStarted()) {
+                    Python.start(AndroidPlatform(this))
+                }
+                val dir = File(filesDir, "").absolutePath
+                val py = Python.getInstance()
+                py.getModule("main").callAttr("start_server", dir)
+                Log.i("XiaokAd", "Python 服务已启动")
+            } catch (e: Throwable) {
+                val sw = StringWriter()
+                e.printStackTrace(PrintWriter(sw))
+                Log.e("XiaokAd", "Python 启动失败: " + sw.toString())
+                try {
+                    File(filesDir, "py_error.log").writeText(sw.toString())
+                } catch (_: Throwable) {}
             }
-            // 把 app 私有可写目录传给 Python（存 presets）
-            val filesDir = File(filesDir, "").absolutePath
-            val py = Python.getInstance()
-            py.getModule("main").callAttr("start_server", filesDir)
         }.start()
     }
 
