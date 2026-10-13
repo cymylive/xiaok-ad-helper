@@ -112,16 +112,21 @@ html,body{margin:0;padding:0;background:#111;color:#e8e8e8;
 #bar{position:fixed;left:0;right:0;top:0;height:32px;line-height:32px;
  padding:0 12px;font-size:12px;background:rgba(0,0,0,.7);color:#7ab;
  z-index:9;overflow:hidden;white-space:nowrap;}
-#addr{position:fixed;left:0;right:0;top:32px;height:30px;line-height:30px;
- padding:0 12px;font-size:13px;background:rgba(20,60,110,.95);color:#8cf;
- z-index:9;overflow:hidden;white-space:nowrap;text-align:center;font-weight:600;}
-#content{padding:78px 16px 60vh;font-size:19px;line-height:1.9;
+#addr{position:fixed;left:0;right:0;top:32px;height:34px;line-height:34px;
+ padding:0 10px;font-size:13px;background:rgba(20,60,110,.95);color:#8cf;
+ z-index:9;white-space:nowrap;display:flex;align-items:center;justify-content:center;
+ gap:10px;font-weight:600;}
+#addr .u{overflow:hidden;text-overflow:ellipsis;}
+#keepBtn{background:#2f855a;color:#fff;border:0;border-radius:12px;
+ padding:4px 12px;font-size:12px;cursor:pointer;font-weight:600;flex:0 0 auto;}
+#keepBtn.off{background:#555;}
+#content{padding:82px 16px 60vh;font-size:19px;line-height:1.9;
  white-space:pre-wrap;word-break:break-word;}
 #empty{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
  color:#555;font-size:15px;}
 </style></head><body>
 <div id="bar">连接中...</div>
-<div id="addr">电脑端访问 <b>__LAN_URL__</b></div>
+<div id="addr"><span class="u">电脑端访问 <b>__LAN_URL__</b></span><button id="keepBtn" style="display:none">屏幕常亮 ✓</button></div>
 <div id="empty">暂无文本，请在电脑端粘贴并发送</div>
 <div id="content"></div>
 <script>
@@ -173,6 +178,27 @@ function poll() {
 }
 render('');
 poll();
+
+// ---- 屏幕常亮开关（仅 APK 内 WebView 生效，浏览器访问时隐藏）----
+(function () {
+  if (typeof AndroidBridge === 'undefined') return;
+  var kb = document.getElementById('keepBtn');
+  if (!kb) return;
+  var on = true;
+  try { on = AndroidBridge.getKeepScreenOn(); } catch (e) {}
+  function upd() {
+    kb.textContent = on ? '屏幕常亮 ✓' : '屏幕常亮 ✗';
+    kb.className = on ? '' : 'off';
+  }
+  kb.style.display = 'inline-block';
+  upd();
+  kb.onclick = function (ev) {
+    ev.preventDefault();
+    on = !on;
+    try { AndroidBridge.setKeepScreenOn(on); } catch (e) {}
+    upd();
+  };
+})();
 </script></body></html>"""
 
 
