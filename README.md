@@ -8,7 +8,7 @@
 
 一个局域网内的小工具，解决「想用手机看长文本，但不想一直用手划」的问题：
 
-- **手机**（Termux）跑一个零依赖 HTTP 服务，显示文本
+- **手机**跑一个零依赖 HTTP 服务，显示文本（**两种装法**：Termux 脚本 / 或直接装 APK）
 - **电脑**（Windows）跑一个全局鼠标钩子，长按左键/右键 → 远程控制手机滚动
 - 电脑端有**系统托盘**常驻，控制台网页里开关
 
@@ -24,6 +24,8 @@
 - 预设题目：常用文本保存为预设，一键载入
 - 设备白名单：只允许指定电脑 IP 控制，防误连
 - 打开 Termux 自动启动（termux-services 托管）
+- **Android APK**：不想装 Termux 可直接装 APK，前台服务常驻，效果一致
+- **GitHub Actions 自动编译**：push 代码自动出 APK
 
 ## 架构
 
@@ -63,7 +65,18 @@
 
 ## 快速开始
 
-### 手机端（Termux）
+### 手机端（方式一：APK，推荐）
+
+从 [Releases](https://github.com/cymylive/xiaok-ad-helper/releases) 下载 `app-debug.apk` 直接安装，打开即用，**不需要 Termux**：
+
+1. 手机装 `app-debug.apk`，打开「小K投屏」
+2. App 会自动在后台启动 HTTP 服务（前台通知常驻，防省电杀）
+3. 电脑浏览器打开 `http://<手机IP>:8080/c` 控制台
+4. 粘贴文本 → 发送；点「开启全局鼠标控制」，按住左/右键控制滚动
+
+协议与 Termux 版**完全一致**，电脑端 exe 无需改动。详见 [android/README.md](android/README.md)。
+
+### 手机端（方式二：Termux）
 
 ```bash
 # 1. 安装 Python 和服务管理
