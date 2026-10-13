@@ -16,6 +16,15 @@ __pycache__/
 # 便携版（exe 太大，走 Release 发布）
 便携版/
 
+# Android 构建产物
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/*.iml
+android/.cxx/
+
 # 系统
 Thumbs.db
 desktop.ini
