@@ -27,7 +27,7 @@ jobs:
         run: pip install pyinstaller
 
       - name: Build EXE (系统托盘版)
-        run: pyinstaller --onefile --windowed --name 小K广告助手 --icon client/icon.ico --add-data "client/icon.ico;." client/mouse_bridge.py
+        run: pyinstaller --onefile --windowed --name xiaok-ad-helper --icon client/icon.ico --add-data "client/icon.ico;." client/mouse_bridge.py
 
       - name: Collect EXE
         shell: pwsh
