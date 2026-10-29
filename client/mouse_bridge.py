@@ -162,6 +162,7 @@ shell32.Shell_NotifyIconW.argtypes = [wintypes.DWORD, ctypes.POINTER(NOTIFYICOND
 _lock = threading.Lock()
 _pressed = {}
 _active = None
+_both_done = False     # 本轮「左右键同时按住」是否已触发过常亮切换
 _enabled = False
 _tray_hwnd = None
 _wndproc_cb = None    # 必须持有 WNDPROC 引用，否则被 GC 导致崩溃
@@ -174,6 +175,18 @@ def _send(action, direction):
     req = urllib.request.Request(
         SERVER + "/cmd",
         data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        urllib.request.urlopen(req, timeout=2).read()
+    except Exception:
+        pass
+
+
+def _send_keep_toggle():
+    """切换手机屏幕常亮（服务端做去抖，网页端同时触发也只算一次）。"""
+    req = urllib.request.Request(
+        SERVER + "/keep",
+        data=json.dumps({"toggle": True}).encode(),
         headers={"Content-Type": "application/json"}, method="POST")
     try:
         urllib.request.urlopen(req, timeout=2).read()
@@ -215,18 +228,39 @@ def _watch_switch():
 
 
 def _monitor():
-    global _active
+    global _active, _both_done
     while True:
         time.sleep(POLL_MS / 1000.0)
         now = time.time()
         with _lock:
-            cur = None
-            if _enabled:
-                for btn in ("left", "right"):
-                    t0 = _pressed.get(btn)
-                    if t0 is not None and (now - t0) * 1000 >= THRESHOLD_MS:
-                        cur = "up" if btn == "left" else "down"
-                        break
+            en = _enabled
+            left_t = _pressed.get("left")
+            right_t = _pressed.get("right")
+
+        cur = None
+        both = False
+        if en:
+            lheld = left_t is not None and (now - left_t) * 1000 >= THRESHOLD_MS
+            rheld = right_t is not None and (now - right_t) * 1000 >= THRESHOLD_MS
+            if lheld and rheld:
+                both = True
+            elif lheld:
+                cur = "up"
+            elif rheld:
+                cur = "down"
+
+        # 左右键同时按住 = 切换屏幕常亮（一次按住只切一次，期间不滚动）
+        if both:
+            if not _both_done:
+                _both_done = True
+                if _active is not None:
+                    _send("stop", None)
+                    _active = None
+                _out("双键：切换屏幕常亮")
+                _send_keep_toggle()
+            continue
+        _both_done = False
+
         if cur != _active:
             if _active is not None:
                 _send("stop", None)
