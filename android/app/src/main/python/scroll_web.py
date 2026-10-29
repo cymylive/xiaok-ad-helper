@@ -9,6 +9,7 @@ import json
 import os
 import socket
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
@@ -47,7 +48,9 @@ def _lan_ip():
 
 _lock = threading.Lock()
 _st = {"text": "", "tver": 0, "speed": DEFAULT_SPEED, "seq": 0,
-       "events": [], "bridge": False, "allow": "", "presets": {}}
+       "events": [], "bridge": False, "allow": "", "presets": {},
+       "keep": True}
+_keep_last = [0.0]   # 常亮切换去抖时间戳（网页与全局钩子可能同时发）
 
 
 def load_presets():
@@ -108,7 +111,7 @@ def snapshot(since, tver):
         evs = [e for e in _st["events"] if e["seq"] > since]
         text = _st["text"] if tver != _st["tver"] else None
         return {"tver": _st["tver"], "text": text, "speed": _st["speed"],
-                "seq": _st["seq"], "events": evs}
+                "seq": _st["seq"], "events": evs, "keep": _st["keep"]}
 
 
 def push_event(payload):
@@ -170,9 +173,16 @@ html,body{margin:0;padding:0;background:#111;color:#e8e8e8;
 <script>
 var since = 0, tver = -1, curSpeed = 1200;
 var scrolling = null, scrollTimer = null;
+var keepOn = null;
 var bar = document.getElementById('bar');
 var content = document.getElementById('content');
 var empty = document.getElementById('empty');
+
+function post(url, body) {
+  return fetch(url, {method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body)}).then(function (r) { return r.json(); });
+}
 
 function render(t) {
   content.textContent = t;
@@ -206,10 +216,15 @@ function poll() {
           else if (e.action === 'stop') stopScroll();
         }
       }
+      if (typeof s.keep === 'boolean' && s.keep !== keepOn) {
+        keepOn = s.keep;
+        applyKeep(keepOn);
+      }
       since = s.seq;
       bar.textContent = '已连接 | 速度 ' + curSpeed + 'px/s | '
         + (scrolling === 'up' ? '↑ 上滑中' : scrolling === 'down' ? '↓ 下滑中' : '待命')
-        + ' | 文本 ' + content.textContent.length + ' 字';
+        + ' | 文本 ' + content.textContent.length + ' 字'
+        + ' | 常亮 ' + (keepOn ? '开' : '关');
     })
     .catch(function () { bar.textContent = '连接中断，重试中...'; })
     .then(function () { setTimeout(poll, 80); });
@@ -217,26 +232,27 @@ function poll() {
 render('');
 poll();
 
-// ---- 屏幕常亮开关（仅 APK 内 WebView 生效，浏览器访问时隐藏）----
-(function () {
-  if (typeof AndroidBridge === 'undefined') return;
-  var kb = document.getElementById('keepBtn');
-  if (!kb) return;
-  var on = true;
-  try { on = AndroidBridge.getKeepScreenOn(); } catch (e) {}
-  function upd() {
-    kb.textContent = on ? '屏幕常亮 ✓' : '屏幕常亮 ✗';
-    kb.className = on ? '' : 'off';
-  }
-  kb.style.display = 'inline-block';
-  upd();
-  kb.onclick = function (ev) {
-    ev.preventDefault();
-    on = !on;
+// ---- 屏幕常亮：服务端 /keep 是唯一真相，这里只负责把状态落到 Android 层 ----
+var keepBtn = document.getElementById('keepBtn');
+var hasBridge = (typeof AndroidBridge !== 'undefined');
+
+function applyKeep(on) {
+  if (hasBridge) {
     try { AndroidBridge.setKeepScreenOn(on); } catch (e) {}
-    upd();
+  }
+  if (keepBtn) {
+    keepBtn.textContent = on ? '屏幕常亮 ✓' : '屏幕常亮 ✗';
+    keepBtn.className = on ? '' : 'off';
+  }
+}
+
+if (keepBtn && hasBridge) {
+  keepBtn.style.display = 'inline-block';
+  keepBtn.onclick = function (ev) {
+    ev.preventDefault();
+    post('/keep', {toggle: true});   // 等服务端回传状态再更新 UI，避免双源打架
   };
-})();
+}
 </script></body></html>"""
 
 
@@ -323,6 +339,8 @@ document.getElementById('saveSpeed').onclick = function () {
 };
 
 var holding = 0;   // 0=无 1=左键 2=右键
+var down = {left: false, right: false};
+var bothMode = false;    // 左右键同时按住中：此期间不滚动
 
 function isFormEl(t) {
   if (!t) return false;
@@ -334,6 +352,22 @@ document.addEventListener('mousedown', function (e) {
   if (isFormEl(e.target)) return;          // 表单控件上保持原生行为
   if (e.button !== 0 && e.button !== 2) return;
   e.preventDefault();
+  if (e.button === 0) down.left = true; else down.right = true;
+
+  // ---- 左右键同时按住 = 切换手机屏幕常亮（一次按住只切一次）----
+  if (down.left && down.right) {
+    bothMode = true;
+    if (holding) { holding = 0; post('/cmd', {action: 'stop'}); }
+    stateEl.textContent = '双键：切换常亮...';
+    post('/keep', {toggle: true}).then(function (r) {
+      flash(r.on ? '屏幕常亮已开启' : '屏幕常亮已关闭');
+      stateEl.textContent = '常亮 ' + (r.on ? '开' : '关');
+      setTimeout(function () { if (bothMode) stateEl.textContent = '待命'; }, 800);
+    });
+    return;
+  }
+
+  if (bothMode) return;                    // 双键按住期间不滚动
   if (holding) return;
   holding = e.button === 0 ? 1 : 2;
   var dir = e.button === 0 ? 'up' : 'down';
@@ -342,6 +376,17 @@ document.addEventListener('mousedown', function (e) {
 });
 
 document.addEventListener('mouseup', function (e) {
+  if (e.button === 0) down.left = false;
+  else if (e.button === 2) down.right = false;
+
+  if (bothMode) {                          // 双键态：松开任意一键即退出
+    bothMode = false;
+    holding = 0;
+    stateEl.textContent = '待命';
+    post('/cmd', {action: 'stop'});
+    return;
+  }
+
   if (!holding) return;
   if ((holding === 1 && e.button !== 0) || (holding === 2 && e.button !== 2)) return;
   holding = 0;
@@ -350,6 +395,9 @@ document.addEventListener('mouseup', function (e) {
 });
 
 window.addEventListener('blur', function () {
+  down.left = false;
+  down.right = false;
+  bothMode = false;
   if (!holding) return;
   holding = 0;
   stateEl.textContent = '待命';
@@ -515,6 +563,9 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/bridge":
             with _lock:
                 self._json({"on": _st["bridge"]})
+        elif path == "/keep":
+            with _lock:
+                self._json({"on": _st["keep"]})
         elif path == "/allow":
             with _lock:
                 self._json({"allow": _st["allow"], "you": self.client_address[0]})
@@ -561,6 +612,19 @@ class Handler(BaseHTTPRequestHandler):
                 _st["bridge"] = bool(data.get("on"))
                 val = _st["bridge"]
             save_config()
+            self._json({"ok": True, "on": val})
+        elif path == "/keep":
+            now = time.time()
+            with _lock:
+                if now - _keep_last[0] < 0.4:
+                    self._json({"ok": True, "on": _st["keep"], "debounced": True})
+                    return
+                _keep_last[0] = now
+                if data.get("toggle"):
+                    _st["keep"] = not _st["keep"]
+                else:
+                    _st["keep"] = bool(data.get("on"))
+                val = _st["keep"]
             self._json({"ok": True, "on": val})
         elif path == "/allow":
             with _lock:
