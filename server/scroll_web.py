@@ -9,6 +9,7 @@ import json
 import os
 import socket
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
@@ -47,7 +48,9 @@ def _lan_ip():
 
 _lock = threading.Lock()
 _st = {"text": "", "tver": 0, "speed": DEFAULT_SPEED, "seq": 0,
-       "events": [], "bridge": False, "allow": "", "presets": {}}
+       "events": [], "bridge": False, "allow": "", "presets": {},
+       "keep": True}
+_keep_last = [0.0]   # 常亮切换去抖时间戳（网页与全局钩子可能同时发）
 
 
 def load_presets():
@@ -86,6 +89,8 @@ def load_config():
             _st["allow"] = str(data["allow"] or "")
         if "bridge" in data:
             _st["bridge"] = bool(data["bridge"])
+        if "keep" in data:
+            _st["keep"] = bool(data["keep"])
     except Exception:
         pass
 
@@ -94,7 +99,8 @@ def save_config():
     """把 speed / allow / bridge 落盘，重启后恢复。"""
     try:
         with _lock:
-            data = {"speed": _st["speed"], "allow": _st["allow"], "bridge": _st["bridge"]}
+            data = {"speed": _st["speed"], "allow": _st["allow"], "bridge": _st["bridge"],
+                    "keep": _st["keep"]}
         tmp = _config_file() + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False)
@@ -108,7 +114,7 @@ def snapshot(since, tver):
         evs = [e for e in _st["events"] if e["seq"] > since]
         text = _st["text"] if tver != _st["tver"] else None
         return {"tver": _st["tver"], "text": text, "speed": _st["speed"],
-                "seq": _st["seq"], "events": evs}
+                "seq": _st["seq"], "events": evs, "keep": _st["keep"]}
 
 
 def push_event(payload):
@@ -489,6 +495,9 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/bridge":
             with _lock:
                 self._json({"on": _st["bridge"]})
+        elif path == "/keep":
+            with _lock:
+                self._json({"on": _st["keep"]})
         elif path == "/allow":
             with _lock:
                 self._json({"allow": _st["allow"], "you": self.client_address[0]})
@@ -535,6 +544,19 @@ class Handler(BaseHTTPRequestHandler):
                 _st["bridge"] = bool(data.get("on"))
                 val = _st["bridge"]
             save_config()
+            self._json({"ok": True, "on": val})
+        elif path == "/keep":
+            now = time.time()
+            with _lock:
+                if now - _keep_last[0] < 0.4:
+                    self._json({"ok": True, "on": _st["keep"], "debounced": True})
+                    return
+                _keep_last[0] = now
+                if data.get("toggle"):
+                    _st["keep"] = not _st["keep"]
+                else:
+                    _st["keep"] = bool(data.get("on"))
+                val = _st["keep"]
             self._json({"ok": True, "on": val})
         elif path == "/allow":
             with _lock:
