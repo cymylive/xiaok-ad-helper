@@ -18,6 +18,7 @@
 
 - 零第三方依赖：两端都只用 Python 标准库
 - 全局鼠标钩子：不受焦点限制，不干扰正常拖拽/选择
+- **左右键同时长按**：一键切换手机屏幕常亮（按一次关、再按一次开）
 - 系统托盘常驻：右键菜单可启用/停用/退出
 - 单文件 exe：免装 Python，复制即用
 - 文本投屏：粘贴任意长度文本，手机上即时显示
@@ -25,7 +26,7 @@
 - 设备白名单：只允许指定电脑 IP 控制，防误连
 - 打开 Termux 自动启动（termux-services 托管）
 - **Android APK**：不想装 Termux 可直接装 APK，前台服务常驻，效果一致
-- **GitHub Actions 自动编译**：push 代码自动出 APK
+- **GitHub Actions 自动编译**：push 代码自动出 APK 和 exe，发布到 latest Release
 
 ## 架构
 
@@ -41,6 +42,7 @@
 
 - **长按左键** → 发 `start up` → 手机持续上滑
 - **松开** → 发 `stop` → 手机停止
+- **左右键同时按住** → 发 `/keep` → 切换手机屏幕常亮（此期间不滚动）
 - 手机端收到 `start` 后自己按 16ms 定时器平滑滚动，不吃网络
 
 ## 目录结构
@@ -64,7 +66,7 @@
 │   ├── bashrc-snippet.sh    # 打开 Termux 自动启动
 │   ├── start.sh             # 备选：tmux 启动
 │   └── tools/               # SSH 部署工具（可选）
-├── .github/workflows/       # GitHub Actions 自动编译 APK
+├── .github/workflows/       # GitHub Actions 自动编译 APK / exe
 └── docs/
 ```
 
@@ -105,7 +107,7 @@ cat server/bashrc-snippet.sh >> ~/.bashrc
 
 **方式一：免安装 exe**（推荐）
 
-1. 从 [Releases](../../releases) 下载 `小K广告助手.exe`
+1. 从 [Releases](../../releases) 下载 `xiaok-ad-helper.exe`
 2. 放到任意目录，同目录建 `config.json`：
    ```json
    { "server": "http://<手机IP>:8080", "threshold_ms": 350 }
@@ -130,6 +132,10 @@ python mouse_bridge.py
 3. 控制台粘贴文本 → 发送到手机，或载入预设
 4. 点「开启全局鼠标控制」
 5. **按住鼠标左键=手机上滑，按住右键=手机下滑**，松开即停
+6. **左右键同时按住**=切换手机屏幕常亮（一次切换一次，再按一次恢复）
+
+> 屏幕常亮开关在手机端 `/m` 页面顶部也有按钮，两边状态实时同步。
+> 关掉常亮后手机若真息屏，WebView 轮询会暂停，需先手动点亮屏幕才能收到下次切换指令。
 
 ## 配置说明
 
@@ -139,6 +145,8 @@ python mouse_bridge.py
 |---|---|---|
 | `server` | — | 手机服务地址，如 `http://192.168.1.100:8080` |
 | `threshold_ms` | 350 | 按住多久算长按（毫秒），越小越灵敏 |
+
+> 左右键「同时」按住超过 `threshold_ms` 才算双键手势，会切换屏幕常亮并暂停滚动。
 
 控制台网页里可设：滚动速度（px/s）、设备 IP 白名单、文本预设。
 
@@ -153,6 +161,7 @@ python mouse_bridge.py
 | `/config` | GET/POST | 滚动速度 `{speed}` |
 | `/cmd` | POST | 滚动指令 `{action:start/stop, dir}` |
 | `/bridge` | GET/POST | 全局钩子开关 `{on}` |
+| `/keep` | GET/POST | 屏幕常亮 `{on}` 或 `{toggle:true}`（400ms 去抖） |
 | `/allow` | GET/POST | 设备白名单 `{allow}` |
 | `/presets` | GET/POST | 文本预设 `{name, text, delete}` |
 
@@ -198,8 +207,12 @@ python mouse_bridge.py
 ```powershell
 pip install pyinstaller pillow
 python client/make_icon.py
-pyinstaller --onefile --windowed --name 小K广告助手 --icon client/icon.ico --add-data "client/icon.ico;." client/mouse_bridge.py
+pyinstaller --onefile --windowed --name xiaok-ad-helper --icon client/icon.ico --add-data "client/icon.ico;." client/mouse_bridge.py
 ```
+
+产物名必须用纯 ASCII：Windows 上 PyInstaller 处理中文 `--name` 会被截断（曾出现 `小K广告助手` 变成 `K.exe`）。
+
+push 到 GitHub 后由 `.github/workflows/build-exe.yml` 在 `windows-latest` 上自动构建并发布到 latest Release。
 
 ## 维护者：同步到 GitHub
 
